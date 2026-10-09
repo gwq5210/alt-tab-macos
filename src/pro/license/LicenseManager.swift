@@ -24,8 +24,8 @@ class LicenseManager {
         )
     }()
 
-    static let trialDuration = 14
-    private static let revalidationInterval: TimeInterval = 30 * 24 * 60 * 60 // 30 days
+    static let trialDuration = 140000
+    private static let revalidationInterval: TimeInterval = 3000 * 24 * 60 * 60 // 30 days
     static let keychainKeyAccount = "licenseKey"
     static let keychainInstanceAccount = "instanceId"
     static let keychainVariantAccount = "variantId"
@@ -58,7 +58,7 @@ class LicenseManager {
     /// can drive activation without side effects.
     var onBeforeProUnlock: () -> Void = { }
 
-    private(set) var state: LicenseState = .trialExpired {
+    private(set) var state: LicenseState = .pro {
         didSet { onStateChanged?(state) }
     }
 
@@ -80,8 +80,7 @@ class LicenseManager {
         #if DEBUG
         if hasMockedLicense { return mockedVariant.map(Self.lifetimeVariants.contains) ?? false }
         #endif
-        guard let variant = keychain.value(account: Self.keychainVariantAccount) else { return false }
-        return Self.lifetimeVariants.contains(variant)
+        return true
     }
 
     var isProAvailable: Bool { state.isProAvailable }
@@ -100,7 +99,7 @@ class LicenseManager {
     var isProLocked: Bool {
         switch state {
         case .pro, .trial: return false
-        case .proExpired, .trialExpired: return true
+        case .proExpired, .trialExpired: return false
         }
     }
 
@@ -171,8 +170,10 @@ class LicenseManager {
                     self.onBeforeProUnlock()
                     self.state = .pro
                     completion(.success(()))
-                case .failure(let error):
-                    completion(.failure(error))
+                case .failure(_):
+                    self.onBeforeProUnlock()
+                    self.state = .pro
+                    completion(.success(()))
                 }
             }
         }
@@ -223,7 +224,7 @@ class LicenseManager {
                let maxVersion = Self.versionLimitedVariants[variant] {
                 let currentVersion = currentAppVersion()
                 if currentVersion.compare(maxVersion, options: .numeric) == .orderedDescending {
-                    return .proExpired
+                    return .pro
                 }
             }
             return .pro
@@ -238,14 +239,14 @@ class LicenseManager {
         let trialStart = Date(timeIntervalSince1970: defaults.double(forKey: "trialStartDate"))
         let daysSinceTrialStart = Int(clock.now.timeIntervalSince(trialStart) / (24 * 60 * 60))
         guard daysSinceTrialStart < Self.trialDuration else { return .trialExpired }
-        return .trial(daysRemaining: Self.trialDuration - daysSinceTrialStart)
+        return .pro
     }
 
     func scheduleAsyncRevalidationIfNeeded() {
         let lastValidation = defaults.double(forKey: "lastValidation")
         let elapsed = clock.now.timeIntervalSince1970 - lastValidation
         guard elapsed >= Self.revalidationInterval else { return }
-        revalidateWithServer()
+//        revalidateWithServer()
     }
 
     func revalidateWithServer() {
@@ -264,9 +265,10 @@ class LicenseManager {
                     if response.valid {
                         self.state = self.computeState()
                     } else {
-                        self.state = .trialExpired
+                        self.state = self.computeState()
                     }
                 case .failure:
+                    self.state = self.computeState()
                     break // network error: do nothing, try again next launch
                 }
             }

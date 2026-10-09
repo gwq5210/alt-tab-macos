@@ -10,7 +10,10 @@ extension EffectView {
     func updateAppearance() { updateAppearance(cornerRadius: Appearance.windowCornerRadius) }
 }
 
-@available(macOS 26.0, *)
+// `NSGlassEffectView` only exists in the macOS 26 SDK, which ships with Swift 6.2 (Xcode 26). `@available` alone
+// still fails to compile against an older SDK, so the compiler version is the gate: below 6.2 every liquid-glass
+// type is omitted and the switcher always builds the `FrostedGlassEffectView` fallback.
+#if compiler(>=6.2)
 extension NSGlassEffectView: EffectView {
     func updateAppearance(cornerRadius: CGFloat) {
         self.cornerRadius = cornerRadius
@@ -22,6 +25,7 @@ extension NSGlassEffectView: EffectView {
 
     var hostView: NSView { contentView! }
 }
+#endif
 
 class FrostedGlassEffectView: NSVisualEffectView, EffectView {
     var hostView: NSView { self }
@@ -63,6 +67,7 @@ class FrostedGlassEffectView: NSVisualEffectView, EffectView {
 /// Cmd-Tab-like clear glass look. `style = .clear` alone renders nearly fully transparent, so the
 /// variant is what makes the panel visible. Lives here as a free helper (no NSGlassEffectView subclass).
 enum LiquidGlass {
+    #if compiler(>=6.2)
     private static let setVariantSelector = NSSelectorFromString("set_variant:")
     private typealias SetVariantFn = @convention(c) (AnyObject, Selector, Int) -> Void
 
@@ -79,6 +84,9 @@ enum LiquidGlass {
         let f = unsafeBitCast(method_getImplementation(method), to: SetVariantFn.self)
         f(view, setVariantSelector, 3)
     }
+    #else
+    static let canUsePrivateLook = false
+    #endif
 }
 
 enum EffectViewKind {
@@ -88,6 +96,7 @@ enum EffectViewKind {
 }
 
 func requiredEffectViewKind() -> EffectViewKind {
+    #if compiler(>=6.2)
     if #available(macOS 26.0, *) {
         if Preferences.effectiveAppearanceStyle(SwitcherSession.activeShortcutIndex) == .appIcons,
            LiquidGlass.canUsePrivateLook {
@@ -95,9 +104,11 @@ func requiredEffectViewKind() -> EffectViewKind {
         }
         return .liquidGlassRegular
     }
+    #endif
     return .frosted
 }
 
+#if compiler(>=6.2)
 @available(macOS 26.0, *)
 private func makeGlassEffectView(clear: Bool) -> NSGlassEffectView {
     let glass = NSGlassEffectView()
@@ -116,8 +127,10 @@ private func makeGlassEffectView(clear: Bool) -> NSGlassEffectView {
     glass.updateAppearance()
     return glass
 }
+#endif
 
 func makeEffectView(for kind: EffectViewKind) -> EffectView {
+    #if compiler(>=6.2)
     if #available(macOS 26.0, *) {
         switch kind {
             case .liquidGlassClear:
@@ -134,5 +147,6 @@ func makeEffectView(for kind: EffectViewKind) -> EffectView {
                 break
         }
     }
+    #endif
     return FrostedGlassEffectView()
 }

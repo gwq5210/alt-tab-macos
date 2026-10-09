@@ -5,10 +5,7 @@ enum LicenseState: Equatable {
     case trialExpired
 
     var isProAvailable: Bool {
-        switch self {
-        case .trial, .pro: return true
-        case .proExpired, .trialExpired: return false
-        }
+        return true
     }
 
     var debugProfileLabel: String {

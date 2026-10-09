@@ -277,9 +277,15 @@ extension NSSearchField {
         sendsSearchStringImmediately = true
         sendsWholeSearchString = true
         bezelStyle = .roundedBezel
+        // `.extraLarge` only exists in the macOS 26 SDK (Swift 6.2 / Xcode 26); `@available` alone still fails
+        // to compile against an older SDK, so the compiler version is the gate.
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             controlSize = .extraLarge
-        } else if #available(macOS 13.0, *) {
+            return
+        }
+        #endif
+        if #available(macOS 13.0, *) {
             controlSize = .large
         }
     }
